@@ -41,8 +41,8 @@ import com.cloudhopper.smpp.type.SmppChannelException;
  * 
  * <p><strong>Note:</strong> This object is created when a connection is accepted and destroyed when the client 
  * disconnects. Notice that this could happen before/after the bind and unbind packets. A session that is created
- * but still not bound is known to be in an idle state ({@link Status#IDLE}). A session that is was unbound (ie. 
- * using a unbind packet) is known to be in a dead state ({@link Status#DEAD}) and should reject any further
+ * but still not bound is known to be in an idle state. A session that is was unbound (ie.
+ * using a unbind packet) is known to be in a dead state and should reject any further
  * packet. </p>
  * 
  * @author German Escobar
@@ -130,18 +130,17 @@ public class SmppSession extends SimpleChannelHandler {
 	
 	/**
 	 * Reusing the cloudhopper window mechanism to handle the response of packets sent through the 
-	 * {@link #sendRequest(SmppRequest)} method.
+	 * sendRequest method.
 	 */
 	@SuppressWarnings("rawtypes")
-	private final Window<Integer,PduRequest,PduResponse> sendWindow = 
-			new Window<Integer,PduRequest,PduResponse>(10);
+	private final Window<Integer,PduRequest,PduResponse> sendWindow =
+			new Window<>(10);
 	
 	/**
 	 * Constructor.
 	 * 
 	 * @param sessionId
 	 * @param channel
-	 * @param sessionListener
 	 * @param packetProcessor
 	 */
 	public SmppSession(int sessionId, Channel channel, PacketProcessor packetProcessor) {
@@ -238,7 +237,7 @@ public class SmppSession extends SimpleChannelHandler {
 	 * 
 	 * @param pdu the Pdu to be sent.
 	 */
-	private void send(Pdu pdu) {
+	public void send(Pdu pdu) {
 		
 		try {
 			
@@ -462,7 +461,7 @@ public class SmppSession extends SimpleChannelHandler {
 	
 	/**
 	 * This is the {@link ResponseSender} implementation that is passed to the 
-	 * {@link PacketProcessor#processPacket(SMPPPacket, ResponseSender)} method. It checks that the response is sent 
+	 * processPacket method. It checks that the response is sent
 	 * only once.
 	 * 
 	 * @author German Escobar

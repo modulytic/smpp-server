@@ -123,7 +123,7 @@ public class SmppServer {
 	
 	/**
 	 * Constructor. Creates an instance with the specified port and default {@link PacketProcessor} and 
-	 * {@link SequenceNumberScheme} implementations.
+	 * implementations.
 	 * 
 	 * @param port the server will accept connections in this port.
 	 */
@@ -140,7 +140,7 @@ public class SmppServer {
 	
 	/**
 	 * Constructor. Creates an instance with the specified port and {@link PacketProcessor} implementation. A
-	 * default {@link SequenceNumberScheme} implementation is used.
+	 * default implementation is used.
 	 * 
 	 * @param port the server will accept connections in this port. 
 	 * @param packetProcessor the {@link PacketProcessor} implementation that will process the SMPP messages.
@@ -173,7 +173,7 @@ public class SmppServer {
 	/**
 	 * Starts listening to client connections through the specified port.
 	 * 
-	 * @throws IOException if an I/O error occurs when opening the socket.
+	 * @throws SmppChannelException if an I/O error occurs when opening the socket.
 	 */
 	@ManagedOperation(impact=Impact.ACTION)
 	public void start() throws SmppChannelException {
