@@ -1,6 +1,5 @@
 package net.gescobar.smppserver;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Collections;
@@ -51,15 +50,15 @@ import com.cloudhopper.smpp.type.SmppChannelException;
  * </pre>
  * 
  * <p>To process the SMPP packets you will need to provide an implementation of the {@link PacketProcessor} interface
- * using the constructor {@link #SmppServer(int, PacketProcessor)} or the setter {@link #setPacketProcessor(PacketProcessor)}.
- * If no {@link PacketProcessor} is specified, a default implementation that always returns 0 (ESME_ROK in the SMPP 
+ * using the constructor {@link #SmppServer(int, Class<? extends PacketProcessor>)} or the setter {@link #setPacketProcessor(Class<? extends PacketProcessor>)}.
+ * If no {@link Class<? extends PacketProcessor>} is specified, a default implementation that always returns 0 (ESME_ROK in the SMPP
  * specification) is used.</p>
  * 
  * @author German Escobar
  */
 public class SmppServer {
 	
-	private Logger log = LoggerFactory.getLogger(SmppServer.class);
+	private final static Logger log = LoggerFactory.getLogger(SmppServer.class);
 	
 	/**
 	 * Possible values for the status of the server.
@@ -86,40 +85,48 @@ public class SmppServer {
 		/**
 		 * The server has started.
 		 */
-		STARTED;
+		STARTED
 		
 	}
 	
 	/**
 	 * A unique name for the server. Used to register the JMX MBean.
 	 */
-	private String name;
+	private final String name;
 
 	/**
 	 * The port in which we are going to listen the connections.
 	 */
-	private int port;
+	private final int port;
 	
 	/**
 	 * The status of the server
 	 */
 	private Status status = Status.STOPPED;
 	
-	private ServerBootstrap serverBootstrap;
+	private final ServerBootstrap serverBootstrap;
 	
 	private Channel serverChannel;
 	
-	private PacketProcessor packetProcessor;
+	private Class<? extends PacketProcessor> packetProcessorClass;
 	
-	private Map<Channel,SmppSession> sessions = new ConcurrentHashMap<Channel,SmppSession>();
+	private final Map<Channel,SmppSession> sessions = new ConcurrentHashMap<>();
 	
-	private AtomicInteger createdSessions = new AtomicInteger();
+	private final AtomicInteger createdSessions = new AtomicInteger();
 	
-	private AtomicInteger destroyedSessions = new AtomicInteger();
+	private final AtomicInteger destroyedSessions = new AtomicInteger();
 	
-	private AtomicInteger sessionId = new AtomicInteger();
+	private final AtomicInteger sessionId = new AtomicInteger();
 	
 	private SmppSessionListener sessionListener;
+
+	private static class DefaultPacketProcessor implements PacketProcessor {
+		@Override
+		public void processPacket(SmppRequest packet, ResponseSender responseSender) {
+			responseSender.send( Response.OK );
+		}
+	}
+
 	
 	/**
 	 * Constructor. Creates an instance with the specified port and default {@link PacketProcessor} and 
@@ -128,14 +135,7 @@ public class SmppServer {
 	 * @param port the server will accept connections in this port.
 	 */
 	public SmppServer(int port) {
-		this(port, new PacketProcessor() {
-			
-			@Override
-			public void processPacket(SmppRequest packet, ResponseSender responseSender) {
-				responseSender.send( Response.OK );
-			}
-			
-		});
+		this(port, DefaultPacketProcessor.class);
 	}
 	
 	/**
@@ -145,11 +145,11 @@ public class SmppServer {
 	 * @param port the server will accept connections in this port. 
 	 * @param packetProcessor the {@link PacketProcessor} implementation that will process the SMPP messages.
 	 */
-	public SmppServer(int port, PacketProcessor packetProcessor) {
+	public SmppServer(int port, Class<? extends PacketProcessor> packetProcessor) {
 		
 		this.port = port;
-		this.packetProcessor = packetProcessor;
-		
+		this.packetProcessorClass = packetProcessor;
+
 		ChannelFactory channelFactory = new NioServerSocketChannelFactory(Executors.newCachedThreadPool(), 
 				Executors.newCachedThreadPool(), Runtime.getRuntime().availableProcessors() * 3);
 		this.serverBootstrap = new ServerBootstrap(channelFactory);
@@ -213,7 +213,7 @@ public class SmppServer {
 		this.status = Status.STOPPING;
 		
 		for (Channel channel : sessions.keySet()) {
-			try { channel.disconnect().await(500); } catch (Exception e) {}
+			try { channel.disconnect().await(500); } catch (Exception ignored) {}
 		}
 		
         // clean up all external resources
@@ -269,13 +269,13 @@ public class SmppServer {
 	 * 
 	 * @param packetProcessor the {@link PacketProcessor} implementation to be used.
 	 */
-	public void setPacketProcessor(PacketProcessor packetProcessor) {
-		
+	public void setPacketProcessor(Class<? extends PacketProcessor> packetProcessor) {
+
 		if (packetProcessor == null) {
 			throw new IllegalArgumentException("No packetProcessor specified");
 		}
-		
-		this.packetProcessor = packetProcessor;
+
+		this.packetProcessorClass = packetProcessor;
 	}
 	
 	public void setSessionListener(SmppSessionListener sessionListener) {
@@ -295,7 +295,9 @@ public class SmppServer {
 			Channel channel = e.getChannel();
 
 			int id = sessionId.incrementAndGet();
-			SmppSession session = new SmppSession(id, channel, packetProcessor);
+
+			PacketProcessor processor = packetProcessorClass.getConstructor().newInstance();
+			SmppSession session = new SmppSession(id, channel, processor);
 			
 			channel.getPipeline().addLast(SmppChannelConstants.PIPELINE_SESSION_PDU_DECODER_NAME, 
 	        		new SmppSessionPduDecoder(new DefaultPduTranscoder(new DefaultPduTranscoderContext())));
@@ -317,10 +319,10 @@ public class SmppServer {
 		}
 		
 		@Override
-		public void channelDisconnected(ChannelHandlerContext ctx, ChannelStateEvent e) throws Exception {
+		public void channelDisconnected(ChannelHandlerContext ctx, ChannelStateEvent e) {
 			
 			SmppSession session = sessions.remove(e.getChannel());
-			
+
 			if (session != null) {
 				log.info("[session-id=" + session.getId() + "] disconnected");
 				
